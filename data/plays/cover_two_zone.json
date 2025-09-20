@@ -1,0 +1,93 @@
+{
+    "play_id":  "cover_two_zone",
+    "name":  "Cover Two Zone",
+    "play_type":  "defense",
+    "assignments":  [
+                        {
+                            "player_id":  "CB1",
+                            "role":  "defend",
+                            "route":  [
+                                          {
+                                              "timestamp":  0.0,
+                                              "x":  -12.0,
+                                              "y":  3.0
+                                          },
+                                          {
+                                              "timestamp":  1.5,
+                                              "x":  -15.0,
+                                              "y":  12.0
+                                          }
+                                      ]
+                        },
+                        {
+                            "player_id":  "CB2",
+                            "role":  "defend",
+                            "route":  [
+                                          {
+                                              "timestamp":  0.0,
+                                              "x":  12.0,
+                                              "y":  3.0
+                                          },
+                                          {
+                                              "timestamp":  1.5,
+                                              "x":  15.0,
+                                              "y":  12.0
+                                          }
+                                      ]
+                        },
+                        {
+                            "player_id":  "S1",
+                            "role":  "defend",
+                            "route":  [
+                                          {
+                                              "timestamp":  0.0,
+                                              "x":  -8.0,
+                                              "y":  12.0
+                                          },
+                                          {
+                                              "timestamp":  1.8,
+                                              "x":  -8.0,
+                                              "y":  25.0
+                                          }
+                                      ]
+                        },
+                        {
+                            "player_id":  "S2",
+                            "role":  "defend",
+                            "route":  [
+                                          {
+                                              "timestamp":  0.0,
+                                              "x":  8.0,
+                                              "y":  12.0
+                                          },
+                                          {
+                                              "timestamp":  1.8,
+                                              "x":  8.0,
+                                              "y":  25.0
+                                          }
+                                      ]
+                        },
+                        {
+                            "player_id":  "LB1",
+                            "role":  "defend",
+                            "route":  null
+                        },
+                        {
+                            "player_id":  "LB2",
+                            "role":  "defend",
+                            "route":  null
+                        },
+                        {
+                            "player_id":  "DE1",
+                            "role":  "rush",
+                            "route":  null
+                        },
+                        {
+                            "player_id":  "DE2",
+                            "role":  "rush",
+                            "route":  null
+                        }
+                    ],
+    "formation":  "Nickel Over",
+    "personnel":  "Nickel"
+}

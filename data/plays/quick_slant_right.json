@@ -1,0 +1,76 @@
+{
+    "play_id":  "quick_slant_right",
+    "name":  "Quick Slant Right",
+    "play_type":  "offense",
+    "assignments":  [
+                        {
+                            "player_id":  "QB1",
+                            "role":  "pass",
+                            "route":  null
+                        },
+                        {
+                            "player_id":  "WR1",
+                            "role":  "route",
+                            "route":  [
+                                          {
+                                              "timestamp":  0.0,
+                                              "x":  -5.0,
+                                              "y":  0.0
+                                          },
+                                          {
+                                              "timestamp":  1.1,
+                                              "x":  -2.0,
+                                              "y":  8.0
+                                          }
+                                      ]
+                        },
+                        {
+                            "player_id":  "WR2",
+                            "role":  "route",
+                            "route":  [
+                                          {
+                                              "timestamp":  0.0,
+                                              "x":  5.0,
+                                              "y":  0.0
+                                          },
+                                          {
+                                              "timestamp":  1.3,
+                                              "x":  8.0,
+                                              "y":  6.0
+                                          }
+                                      ]
+                        },
+                        {
+                            "player_id":  "RB1",
+                            "role":  "carry",
+                            "route":  null
+                        },
+                        {
+                            "player_id":  "LT",
+                            "role":  "block",
+                            "route":  null
+                        },
+                        {
+                            "player_id":  "LG",
+                            "role":  "block",
+                            "route":  null
+                        },
+                        {
+                            "player_id":  "C",
+                            "role":  "block",
+                            "route":  null
+                        },
+                        {
+                            "player_id":  "RG",
+                            "role":  "block",
+                            "route":  null
+                        },
+                        {
+                            "player_id":  "RT",
+                            "role":  "block",
+                            "route":  null
+                        }
+                    ],
+    "formation":  "Shotgun Trips Right",
+    "personnel":  "11"
+}
