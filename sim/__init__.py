@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List
 
 from sim.draft import Prospect, generate_draft_class, run_draft
+from sim.seed import SeedManager
 
 
 @dataclass
@@ -49,4 +50,5 @@ __all__ = [
     "generate_draft_class",
     "run_draft",
     "simple_draft_setup",
+    "SeedManager",
 ]

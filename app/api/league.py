@@ -8,6 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from scripts.seed_league import DEFAULT_SEED, SeedSummary, seed_league
+from domain.savepoint import create_savepoint
 
 router = APIRouter(prefix="/league", tags=["league"])
 
@@ -31,6 +32,7 @@ async def create_league(payload: LeagueCreateRequest) -> LeagueCreateResponse:
     seed = payload.seed if payload.seed is not None else DEFAULT_SEED
     try:
         summary = await _run_seed(seed)
+        create_savepoint(f"preseason_{seed}")
     except Exception as exc:  # pragma: no cover - defensive guard
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return LeagueCreateResponse(**asdict(summary))

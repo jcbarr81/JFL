@@ -8,6 +8,7 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 from domain.models import Player
 from sim.ruleset import GameConfig, GameSummary, simulate_game
+from sim.seed import SeedManager
 from sim.statbook import StatBook
 
 
@@ -115,6 +116,8 @@ def simulate_season(
     }
 
     games_by_week: Dict[int, List[Tuple[str, str]]] = {}
+    seed_manager = SeedManager(base_seed=seed)
+    season_label = str(seed)
     for week, home_id, away_id in schedule_matrix:
         games_by_week.setdefault(week, []).append((home_id, away_id))
 
@@ -131,7 +134,7 @@ def simulate_season(
                 for home_id, away_id in games:
                     home = season_teams[home_id]
                     away = season_teams[away_id]
-                    game_seed = rng.randint(0, 2**31 - 1)
+                    game_seed = seed_manager.game_seed(season_label, week, home_id, away_id)
                     future = executor.submit(
                         _simulate_game_task,
                         home_id,
@@ -149,12 +152,13 @@ def simulate_season(
                 for home_id, away_id in games:
                     home = season_teams[home_id]
                     away = season_teams[away_id]
+                    game_seed = seed_manager.game_seed(season_label, week, home_id, away_id)
                     summary = _simulate_game_task(
                         home_id,
                         home.roster,
                         away_id,
                         away.roster,
-                        rng.randint(0, 2**31 - 1),
+                        game_seed,
                         season_config,
                     )
                     _finalize_game(summary, home, away, rng, game_results)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 from uuid import uuid4
 
@@ -12,6 +13,8 @@ from sqlmodel import Session, select
 
 from app.api.deps import db_session
 from domain.db import BoxScoreRow, GameRow, PlayerRow, SeasonRow, TeamRow
+from domain.savepoint import create_savepoint
+from sim.exports import export_draft_results, export_injuries, export_player_stats, export_standings, export_team_stats
 from domain.models import Attributes, Player
 from sim.schedule import SeasonResult, make_schedule, simulate_season
 
@@ -117,10 +120,15 @@ def _persist_season(
     season_row: SeasonRow,
     schedule: List[Tuple[int, str, str]],
     result: SeasonResult,
+    *,
+    midseason_savepoint: str | None = None,
 ) -> List[GameResultEntry]:
     session.add(season_row)
     games_payload: List[GameResultEntry] = []
-    for (week, home_team, away_team), summary in zip(schedule, result.game_results):
+    total_games = len(result.game_results)
+    midpoint = total_games // 2 if total_games > 1 else 0
+    mid_save_created = False
+    for index, ((week, home_team, away_team), summary) in enumerate(zip(schedule, result.game_results)):
         game_id = f"{season_row.season_id}-W{week:02d}-{home_team}-{away_team}-{uuid4().hex[:6]}"
         game_row = GameRow(
             game_id=game_id,
@@ -181,6 +189,10 @@ def _persist_season(
                 away_score=summary.away_score,
             )
         )
+        if midseason_savepoint and not mid_save_created and midpoint and index + 1 >= midpoint:
+            session.commit()
+            create_savepoint(midseason_savepoint)
+            mid_save_created = True
     return games_payload
 
 
@@ -248,7 +260,30 @@ async def run_season(
             description=payload.description,
             is_current=False,
         )
-        games = _persist_season(session, season_row, sim_payload.schedule, sim_payload.result)
+        midseason_name = f"{season_id}_midseason"
+        games = _persist_season(
+            session,
+            season_row,
+            sim_payload.schedule,
+            sim_payload.result,
+            midseason_savepoint=midseason_name,
+        )
+        session.commit()
+        pre_draft_name = f"{season_id}_pre_draft"
+        create_savepoint(pre_draft_name)
+
+        export_root = Path("data/exports") / season_id
+        export_root.mkdir(parents=True, exist_ok=True)
+        export_standings(sim_payload.result, export_root / "standings.csv")
+        export_team_stats(sim_payload.result, export_root / "team_stats.csv")
+        export_player_stats(sim_payload.result, export_root / "player_stats.csv")
+        export_injuries(sim_payload.result, export_root / "injuries.json")
+        draft_results = [
+            {"team_id": team_id, "round": 1, "overall": order + 1}
+            for order, (team_id, _, _) in enumerate(sim_payload.result.standings)
+        ]
+        export_draft_results(draft_results, export_root / "draft_results.json")
+
         standings = [
             StandingEntry(team_id=team_id, wins=wins, losses=losses)
             for team_id, wins, losses in sim_payload.result.standings
