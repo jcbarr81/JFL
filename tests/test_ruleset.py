@@ -187,7 +187,7 @@ def test_penalty_enforcement_repeat_down(monkeypatch) -> None:
 
     monkeypatch.setattr(
         "sim.ruleset._draw_penalty",
-        lambda rng: PenaltyDecision(team="offense", penalty=PenaltyType.HOLDING),
+        lambda result, rng: PenaltyDecision(team="offense", penalty=PenaltyType.HOLDING),
     )
 
     resolution = _maybe_apply_penalty(
@@ -270,7 +270,7 @@ def test_injury_event_triggers_substitution(monkeypatch) -> None:
     monkeypatch.setattr("sim.ruleset.call_offense", fake_call_offense)
     monkeypatch.setattr("sim.ruleset.check_injury", fake_check_injury)
     monkeypatch.setattr("sim.ruleset.Random.choice", lambda self, seq: seq[0])
-    monkeypatch.setattr("sim.ruleset._draw_penalty", lambda rng: None)
+    monkeypatch.setattr("sim.ruleset._draw_penalty", lambda result, rng: None)
 
     config = GameConfig(quarter_length=120.0, quarters=1, max_plays=6)
     simulate_game(

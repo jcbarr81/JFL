@@ -4,6 +4,8 @@ import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Set
 
+from sim.ruleset import TUNING
+
 from domain.models import Assignment, Attributes, Play, Player, RoutePoint
 from sim.statbook import PlayEvent
 
@@ -135,9 +137,11 @@ def simulate_play(
             _advance_entity(entity, time_elapsed, DT, fatigue, override_target=target)
 
         if qb_entity:
+            pressure_distance = max(0.5, 3.0 * TUNING.pressure_mod)
+            sack_distance = 0.8
             for defender in defenses.values():
                 distance = _distance(defender.position, qb_entity.position)
-                if distance < 3.0 and defender.player.player_id not in pressured_defenders:
+                if distance < pressure_distance and defender.player.player_id not in pressured_defenders:
                     pressure = True
                     pressured_defenders.add(defender.player.player_id)
                     events.append(
@@ -150,7 +154,7 @@ def simulate_play(
                             metadata={"passer_id": passer_id, "defender_id": defender.player.player_id},
                         )
                     )
-                if distance < 1.0 and not released:
+                if distance < sack_distance and not released:
                     sack = True
                     pressure = True
                     if qb_entity and not attempt_logged:
@@ -363,6 +367,11 @@ def simulate_play(
                         if _attempt_tackle(defender.player.attributes, owner_entity.player.attributes, rng):
                             yards_gained = _yard_line(owner_entity.position[1])
                             yac = max(0.0, yards_gained - max(0.0, air_yards)) if released else 0.0
+                            if released:
+                                yac = max(0.0, min(100.0, yac * TUNING.yac_mod))
+                                yards_gained = max(0.0, min(100.0, max(0.0, air_yards) + yac))
+                            else:
+                                yards_gained = max(0.0, min(100.0, yards_gained * TUNING.rush_block_mod))
                             events.append(
                                 PlayEvent(
                                     type="tackle",
@@ -437,6 +446,11 @@ def simulate_play(
         if owner_entity:
             yards_gained = _yard_line(owner_entity.position[1])
             yac = max(0.0, yards_gained - max(0.0, air_yards)) if released else 0.0
+            if released:
+                yac = max(0.0, min(100.0, yac * TUNING.yac_mod))
+                yards_gained = max(0.0, min(100.0, max(0.0, air_yards) + yac))
+            else:
+                yards_gained = max(0.0, min(100.0, yards_gained * TUNING.rush_block_mod))
             events.append(
                 PlayEvent(
                     type="tackle",
@@ -710,10 +724,10 @@ def _resolve_catch(
     if defender:
         defender_skill = (defender.player.attributes.awareness + defender.player.attributes.agility) / 2
     spread = (qb_skill + wr_skill) - defender_skill
-    completion_prob = _logistic(spread / 12.0)
+    completion_prob = min(0.99, _logistic(spread / 12.0) * TUNING.completion_mod)
     if rng.random() < completion_prob:
         return True, False
-    interception_chance = _logistic((defender_skill - qb_skill) / 15.0) * 0.35
+    interception_chance = min(0.95, _logistic((defender_skill - qb_skill) / 15.0) * 0.35 * TUNING.int_mod)
     return False, rng.random() < interception_chance
 
 
@@ -781,6 +795,7 @@ def _finalize_play(
                 "interception": interception,
                 "sack": sack,
                 "completed": completed,
+                "pressure": pressure,
             },
         )
     )
@@ -796,3 +811,4 @@ def _finalize_play(
         completed=completed,
         events=list(events),
     )
+

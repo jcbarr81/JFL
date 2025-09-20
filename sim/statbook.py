@@ -44,6 +44,7 @@ def _team_template() -> Dict[str, float]:
         "pass_attempts": 0,
         "rush_attempts": 0,
         "pressures": 0,
+        "pressured_plays": 0,
         "sacks": 0,
         "turnovers": 0,
     }
@@ -138,6 +139,8 @@ class StatBook:
                     teams["offense"]["successes"] += 1
                 if meta.get("interception"):
                     teams["offense"]["turnovers"] += 1
+                if meta.get("pressure"):
+                    teams["offense"]["pressured_plays"] += 1
 
                 passer_id = meta.get("passer_id")
                 runner_id = meta.get("runner_id")

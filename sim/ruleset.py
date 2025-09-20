@@ -1,12 +1,26 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 from collections import defaultdict
 from random import Random
+from typing import Dict, Iterable, List, Optional, Sequence
+
 from sim.special_teams import PenaltyType, apply_penalty, attempt_field_goal
 from sim.fatigue import FatigueState, InjuryOutcome, check_injury
-from typing import Dict, Iterable, List, Optional, Sequence
+
+
+@dataclass
+class TuningConfig:
+    completion_mod: float = 0.65
+    pressure_mod: float = 0.05
+    int_mod: float = 0.3
+    yac_mod: float = 0.8
+    rush_block_mod: float = 1.2
+    penalty_rate_mod: float = 1.0
+
+
+TUNING = TuningConfig()
+
 
 from domain.models import Assignment, Play, Player, RoutePoint
 from sim.ai_decision import OffenseContext, PlayChoice, call_offense
@@ -14,17 +28,7 @@ from sim.engine import PlayResult, simulate_play
 from sim.statbook import PlayEvent, StatBook
 
 
-@dataclass
-class TuningConfig:
-    completion_mod: float = 1.0
-    pressure_mod: float = 1.0
-    int_mod: float = 1.0
-    yac_mod: float = 1.0
-    rush_block_mod: float = 1.0
-    penalty_rate_mod: float = 1.0
 
-
-TUNING = TuningConfig()
 
 
 @dataclass
@@ -166,7 +170,11 @@ TACKLE_FATIGUE_BONUS = 0.07
 SACK_FATIGUE_BONUS = 0.09
 OFFENSE_DRIVE_RECOVERY = 28.0
 DEFENSE_DRIVE_RECOVERY = 20.0
-BASE_PENALTY_RATE = 0.07
+BASE_PENALTY_RATE = 0.05
+PASS_PENALTY_BONUS = 0.02
+RUN_PENALTY_BONUS = 0.01
+PRESSURE_PENALTY_BONUS = 0.02
+SACK_PENALTY_BONUS = 0.02
 FIELD_GOAL_DISTANCE_LIMIT = 58.0
 PUNT_NET_MIN = 36.0
 PUNT_NET_MAX = 48.0
@@ -262,36 +270,45 @@ def simulate_game(
         start_quarter = _current_quarter(cfg, remaining_time)
 
         while remaining_time > 0 and total_plays < cfg.max_plays:
-            if down == 4 and yards_to_first > 2.0:
-                special = _handle_special_down(
-                    offense,
-                    defense,
-                    yardline,
-                    rng,
-                    drive_index,
+            if down == 4:
+                score_diff = offense.score - defense.score
+                should_attempt_special = (
+                    yards_to_first > 2.0
+                    or yardline >= 55.0
+                    or score_diff < 0
+                    or remaining_time < 120.0
+                    or (yards_to_first > 1.0 and yardline >= 45.0)
                 )
-                time_spent = min(special.time_spent, remaining_time)
-                remaining_time -= time_spent
-                drive_duration += time_spent
-                total_plays += 1
-                drive_plays += 1
-                drive_result = special.result
-                if special.points:
-                    offense.score += special.points
-                    _record_special_events(offense, defense, special.events)
-                    kickoff = _execute_kickoff(offense, defense, rng, drive_index)
-                    kick_time = min(kickoff.time_spent, remaining_time)
-                    remaining_time -= kick_time
-                    drive_duration += kick_time
-                    _record_special_events(offense, defense, kickoff.events)
-                    offense_idx, defense_idx = defense_idx, offense_idx
-                    next_start_yardline = kickoff.start_yardline
-                else:
-                    _record_special_events(offense, defense, special.events)
-                    next_start_yardline = special.next_start
-                    if special.change_possession:
+                if should_attempt_special:
+                    special = _handle_special_down(
+                        offense,
+                        defense,
+                        yardline,
+                        rng,
+                        drive_index,
+                    )
+                    time_spent = min(special.time_spent, remaining_time)
+                    remaining_time -= time_spent
+                    drive_duration += time_spent
+                    total_plays += 1
+                    drive_plays += 1
+                    drive_result = special.result
+                    if special.points:
+                        offense.score += special.points
+                        _record_special_events(offense, defense, special.events)
+                        kickoff = _execute_kickoff(offense, defense, rng, drive_index)
+                        kick_time = min(kickoff.time_spent, remaining_time)
+                        remaining_time -= kick_time
+                        drive_duration += kick_time
+                        _record_special_events(offense, defense, kickoff.events)
                         offense_idx, defense_idx = defense_idx, offense_idx
-                break
+                        next_start_yardline = kickoff.start_yardline
+                    else:
+                        _record_special_events(offense, defense, special.events)
+                        next_start_yardline = special.next_start
+                        if special.change_possession:
+                            offense_idx, defense_idx = defense_idx, offense_idx
+                    break
 
             current_quarter = _current_quarter(cfg, remaining_time)
             pre_yardline = yardline
@@ -971,13 +988,23 @@ def _defensive_load_adjustments(events: Iterable[PlayEvent]) -> Dict[str, float]
 
 
 
-def _draw_penalty(rng: Random) -> Optional[PenaltyDecision]:
-    if rng.random() >= BASE_PENALTY_RATE * TUNING.penalty_rate_mod:
+def _draw_penalty(result: PlayResult, rng: Random) -> Optional[PenaltyDecision]:
+    base = BASE_PENALTY_RATE * TUNING.penalty_rate_mod
+    if result.play_type == "pass":
+        base += PASS_PENALTY_BONUS
+    elif result.play_type == "run":
+        base += RUN_PENALTY_BONUS
+    if result.pressure:
+        base += PRESSURE_PENALTY_BONUS
+    if result.sack:
+        base += SACK_PENALTY_BONUS
+    base = min(0.35, base)
+    if rng.random() >= base:
         return None
     roll = rng.random()
-    if roll < 0.5:
+    if roll < 0.45:
         return PenaltyDecision(team="offense", penalty=PenaltyType.HOLDING)
-    if roll < 0.8:
+    if roll < 0.75:
         return PenaltyDecision(team="defense", penalty=PenaltyType.OFFSIDES)
     return PenaltyDecision(team="defense", penalty=PenaltyType.DPI)
 
@@ -994,7 +1021,7 @@ def _maybe_apply_penalty(
     yards_to_first: float,
     rng: Random,
 ) -> PenaltyResolution:
-    decision = _draw_penalty(rng)
+    decision = _draw_penalty(result, rng)
     if not decision:
         return PenaltyResolution(False, yardline, yards_to_first, down, 0.0, False, False)
 
@@ -1108,6 +1135,7 @@ def _injury_event(team: str, player_id: str, timestamp: float, severity: str) ->
         player_id=player_id,
         metadata={"severity": severity},
     )
+
 
 
 

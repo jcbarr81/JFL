@@ -41,6 +41,7 @@ class TeamSeason:
 class SeasonResult:
     standings: List[Tuple[str, int, int]]
     game_results: List[GameSummary]
+    team_books: Dict[str, StatBook]
 
 
 def simulate_season(
@@ -92,4 +93,5 @@ def simulate_season(
         key=lambda item: (-item[1], item[2], item[0]),
     )
 
-    return SeasonResult(standings=standings, game_results=game_results)
+    team_books = {team_id: team.book for team_id, team in season_teams.items()}
+    return SeasonResult(standings=standings, game_results=game_results, team_books=team_books)
