@@ -70,11 +70,13 @@ def simulate_play(
     seed: int,
     duration: float = 8.0,
     tick_rate: float = TICK_RATE,
+    fatigue_modifiers: Optional[Dict[str, float]] = None,
 ) -> PlayResult:
     rng = _SeededRandom(seed)
+    modifiers = fatigue_modifiers or {}
 
-    offenses = _initialise_offense_entities(play, offense_roster)
-    defenses = _initialise_defense_entities(defense_roster)
+    offenses = _initialise_offense_entities(play, offense_roster, modifiers)
+    defenses = _initialise_defense_entities(defense_roster, modifiers)
 
     qb_entity = _select_qb(offenses)
     primary_carrier = qb_entity or _find_primary_carrier(offenses)
@@ -513,7 +515,9 @@ class _SeededRandom:
         return mean + std_dev * z0
 
 
-def _initialise_offense_entities(play: Play, roster: Dict[str, Player]) -> Dict[str, _Entity]:
+def _initialise_offense_entities(
+    play: Play, roster: Dict[str, Player], modifiers: Dict[str, float]
+) -> Dict[str, _Entity]:
     entities: Dict[str, _Entity] = {}
     for index, assignment in enumerate(play.assignments):
         player = roster.get(assignment.player_id)
@@ -528,13 +532,15 @@ def _initialise_offense_entities(play: Play, roster: Dict[str, Player]) -> Dict[
             route=route,
             position=[start_point.x, start_point.y],
             velocity=[0.0, 0.0],
-            base_speed=_base_speed(player.attributes.speed),
+            base_speed=_base_speed(player.attributes.speed) * modifiers.get(player.player_id, 1.0),
         )
         entities[player.player_id] = entity
     return entities
 
 
-def _initialise_defense_entities(roster: Dict[str, Player]) -> Dict[str, _Entity]:
+def _initialise_defense_entities(
+    roster: Dict[str, Player], modifiers: Dict[str, float]
+) -> Dict[str, _Entity]:
     entities: Dict[str, _Entity] = {}
     for index, player in enumerate(roster.values()):
         if index >= 11:
@@ -549,7 +555,7 @@ def _initialise_defense_entities(roster: Dict[str, Player]) -> Dict[str, _Entity
             route=route,
             position=[x, y],
             velocity=[0.0, 0.0],
-            base_speed=_base_speed(player.attributes.speed) * 0.85,
+            base_speed=_base_speed(player.attributes.speed) * 0.85 * modifiers.get(player.player_id, 1.0),
         )
     return entities
 

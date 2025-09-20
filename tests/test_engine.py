@@ -188,3 +188,40 @@ def test_simulation_is_deterministic_for_same_seed() -> None:
 
     result_three = simulate_play(play, offense, defense, seed=1000)
     assert result_three != result_one
+
+
+def test_fatigue_modifier_reduces_yards() -> None:
+    play = Play(
+        play_id="fatigue_zone",
+        name="Fatigue Zone",
+        formation="Singleback",
+        personnel="12",
+        play_type="offense",
+        assignments=[
+            Assignment(
+                player_id="RB1",
+                role="carry",
+                route=[
+                    RoutePoint(timestamp=0.0, x=0.0, y=0.0),
+                    RoutePoint(timestamp=2.0, x=0.0, y=8.0),
+                ],
+            ),
+            Assignment(player_id="LT", role="block", route=None),
+            Assignment(player_id="LG", role="block", route=None),
+            Assignment(player_id="C", role="block", route=None),
+            Assignment(player_id="RG", role="block", route=None),
+            Assignment(player_id="RT", role="block", route=None),
+        ],
+    )
+
+    offense = _load_sample_offense()
+    defense = _load_sample_defense()
+
+    baseline = simulate_play(play, offense, defense, seed=777)
+    fatigue_modifiers = {"RB1": 0.5}
+    fatigued = simulate_play(
+        play, offense, defense, seed=777, fatigue_modifiers=fatigue_modifiers
+    )
+
+    assert fatigued.yards_gained <= baseline.yards_gained
+    assert fatigued.duration >= baseline.duration or fatigued.yards_gained < baseline.yards_gained
