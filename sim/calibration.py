@@ -1,7 +1,8 @@
 ﻿from __future__ import annotations
 
 from dataclasses import dataclass
-from statistics import mean
+
+import numpy as np
 from typing import Dict, List, Tuple
 
 from domain.models import Attributes, Player
@@ -134,8 +135,8 @@ def _aggregate_metrics(result: SeasonResult) -> Dict[str, List[float]]:
 def _average_metrics(metric_lists: Dict[str, List[float]]) -> Dict[str, float]:
     averages: Dict[str, float] = {}
     for key, values in metric_lists.items():
-        filtered = [value for value in values if value >= 0]
-        averages[key] = mean(filtered) if filtered else 0.0
+        filtered = np.asarray([value for value in values if value >= 0], dtype=float)
+        averages[key] = float(filtered.mean()) if filtered.size else 0.0
     return averages
 
 
@@ -174,6 +175,7 @@ def run_calibration(
     seasons: int = 5,
     team_count: int = 8,
     base_seed: int = 0,
+    workers: int = 1,
     config: GameConfig | None = None,
 ) -> CalibrationMetrics:
     config = config or GameConfig()
@@ -183,7 +185,7 @@ def run_calibration(
     for offset in range(seasons):
         seed = base_seed + offset
         teams = _build_league(team_count, seed)
-        result = simulate_season(teams, seed=seed, config=config)
+        result = simulate_season(teams, seed=seed, config=config, workers=workers)
         season_metrics = _aggregate_metrics(result)
         for key, values in season_metrics.items():
             if not values:

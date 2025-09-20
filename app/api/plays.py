@@ -1,18 +1,34 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ValidationError
 
-from domain.models import Assignment, Play
+from domain.models import Play
 
 router = APIRouter(prefix="/play", tags=["plays"])
 
 
 class PlayValidationResponse(BaseModel):
     ok: bool
+
+
+class PlaySummary(BaseModel):
+    play_id: str
+    name: str
+    formation: str
+    personnel: str
+    play_type: str
+    path: str
+
+
+class PlayImportResponse(BaseModel):
+    play_id: str
+    path: str
 
 
 def _sanitize_error_context(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -93,6 +109,58 @@ def _validate_play(play: Play) -> list[dict[str, Any]]:
             )
 
     return errors
+
+
+def _play_directory() -> Path:
+    directory = Path("data/plays")
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+@router.get("/list", response_model=list[PlaySummary])
+async def list_plays() -> list[PlaySummary]:
+    directory = _play_directory()
+    summaries: list[PlaySummary] = []
+    for path in sorted(directory.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            play = Play.model_validate(payload)
+            errors = _validate_play(play)
+            if errors:
+                continue
+            summaries.append(
+                PlaySummary(
+                    play_id=play.play_id,
+                    name=play.name,
+                    formation=play.formation,
+                    personnel=play.personnel,
+                    play_type=play.play_type,
+                    path=str(path),
+                )
+            )
+        except (json.JSONDecodeError, ValidationError):
+            continue
+    return summaries
+
+
+@router.post(
+    "/import",
+    response_model=PlayImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_play(play: Play, overwrite: bool = Query(False, description="Overwrite existing play file")) -> PlayImportResponse:
+    errors = _validate_play(play)
+    if errors:
+        raise HTTPException(status_code=400, detail=_sanitize_error_context(errors))
+
+    directory = _play_directory()
+    path = directory / f"{play.play_id}.json"
+    if path.exists() and not overwrite:
+        raise HTTPException(status_code=409, detail=f"Play '{play.play_id}' already exists. Use overwrite=true to replace it.")
+
+    payload = play.model_dump(mode="json")
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return PlayImportResponse(play_id=play.play_id, path=str(path))
 
 
 @router.post("/validate", response_model=PlayValidationResponse)

@@ -40,3 +40,13 @@ def test_simulate_season_completes():
     assert len(result.game_results) == len(make_schedule(list(teams.keys())))
     total_games = sum(w + l for _, w, l in result.standings)
     assert total_games == len(result.game_results) * 2
+
+
+def test_simulate_season_parallel_matches_serial() -> None:
+    serial_teams = {f"TEAM{idx}": _roster(f"SERIAL{idx}") for idx in range(4)}
+    parallel_teams = {f"TEAM{idx}": _roster(f"SERIAL{idx}") for idx in range(4)}
+    seed = 2
+    serial = simulate_season(serial_teams, seed=seed, workers=1)
+    parallel = simulate_season(parallel_teams, seed=seed, workers=2)
+    assert parallel.standings == serial.standings
+    assert len(parallel.game_results) == len(serial.game_results)

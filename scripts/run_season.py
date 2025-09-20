@@ -1,4 +1,5 @@
 import csv
+import os
 from pathlib import Path
 from random import Random
 
@@ -37,9 +38,10 @@ def _build_roster(prefix: str) -> dict[str, Player]:
     return roster
 
 
-def run_season(seed: int = 0) -> SeasonResult:
+def run_season(seed: int = 0, workers: int | None = None) -> SeasonResult:
     teams = {f"TEAM_{index}": _build_roster(f"T{index}") for index in range(1, 9)}
-    result = simulate_season(teams, seed=seed)
+    worker_count = workers or max(1, (os.cpu_count() or 1))
+    result = simulate_season(teams, seed=seed, workers=worker_count)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     _write_standings(result, OUTPUT_DIR / "standings.csv")

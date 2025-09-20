@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
 
 from typing import Callable, Dict, Iterable, List, Optional
 
-from PyQt6.QtCore import QPointF, QRectF, Qt
+from PyQt6.QtCore import QPointF, QRectF, Qt, QLineF
 from PyQt6.QtGui import QAction, QColor, QPen
 from PyQt6.QtWidgets import (
     QApplication,
@@ -122,13 +122,13 @@ class FieldScene(QGraphicsScene):
             x = (yard + FIELD_HALF_WIDTH) * PIXELS_PER_YARD
             pen = pen_major if yard % 5 == 0 else pen_minor
             painter.setPen(pen)
-            painter.drawLine(x, 0.0, x, FIELD_LENGTH * PIXELS_PER_YARD)
+            painter.drawLine(QLineF(x, 0.0, x, FIELD_LENGTH * PIXELS_PER_YARD))
 
         # Horizontal grid every 5 yards.
         for yard in range(0, int(FIELD_LENGTH) + 1, 5):
             y = (FIELD_LENGTH - yard) * PIXELS_PER_YARD
             painter.setPen(pen_major if yard % 10 == 0 else pen_minor)
-            painter.drawLine(0.0, y, self.sceneRect().width(), y)
+            painter.drawLine(QLineF(0.0, y, self.sceneRect().width(), y))
 
 
 class PlayerItem(QGraphicsEllipseItem):

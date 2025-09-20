@@ -64,6 +64,8 @@ class GameSummary:
     winner: Optional[str]
     home_boxscore: Dict[str, Dict[str, Dict[str, float]]]
     away_boxscore: Dict[str, Dict[str, Dict[str, float]]]
+    home_events: List[PlayEvent] = field(default_factory=list)
+    away_events: List[PlayEvent] = field(default_factory=list)
 
 
 @dataclass
@@ -239,6 +241,8 @@ def simulate_game(
         _TeamState(name=away_team, roster=away_roster, book=away_book),
     ]
 
+    event_log: Dict[str, List[PlayEvent]] = {home_team: [], away_team: []}
+
     offense_idx = rng.choice([0, 1])
     defense_idx = 1 - offense_idx
 
@@ -296,16 +300,16 @@ def simulate_game(
                     drive_result = special.result
                     if special.points:
                         offense.score += special.points
-                        _record_special_events(offense, defense, special.events)
+                        _record_special_events(offense, defense, special.events, event_log)
                         kickoff = _execute_kickoff(offense, defense, rng, drive_index)
                         kick_time = min(kickoff.time_spent, remaining_time)
                         remaining_time -= kick_time
                         drive_duration += kick_time
-                        _record_special_events(offense, defense, kickoff.events)
+                        _record_special_events(offense, defense, kickoff.events, event_log)
                         offense_idx, defense_idx = defense_idx, offense_idx
                         next_start_yardline = kickoff.start_yardline
                     else:
-                        _record_special_events(offense, defense, special.events)
+                        _record_special_events(offense, defense, special.events, event_log)
                         next_start_yardline = special.next_start
                         if special.change_possession:
                             offense_idx, defense_idx = defense_idx, offense_idx
@@ -383,7 +387,7 @@ def simulate_game(
                 repeat_down = False
                 force_first_down = False
 
-            _record_events(offense, defense, result)
+            _record_events(offense, defense, result, event_log)
 
             if result.interception:
                 drive_result = "INT"
@@ -395,7 +399,7 @@ def simulate_game(
                 offense.score += 7
                 drive_result = "TD"
                 kickoff = _execute_kickoff(offense, defense, rng, drive_index)
-                _record_special_events(offense, defense, kickoff.events)
+                _record_special_events(offense, defense, kickoff.events, event_log)
                 kick_time = min(kickoff.time_spent, remaining_time)
                 remaining_time -= kick_time
                 drive_duration += kick_time
@@ -440,6 +444,8 @@ def simulate_game(
             break
 
     home_state, away_state = teams
+    home_events = list(event_log.get(home_state.name, []))
+    away_events = list(event_log.get(away_state.name, []))
     if home_state.score > away_state.score:
         winner: Optional[str] = home_state.name
     elif away_state.score > home_state.score:
@@ -458,6 +464,8 @@ def simulate_game(
         winner=winner,
         home_boxscore=home_state.book.boxscore(),
         away_boxscore=away_state.book.boxscore(),
+        home_events=home_events,
+        away_events=away_events,
     )
 def _current_quarter(config: GameConfig, remaining_time: float) -> int:
     elapsed = config.quarter_length * config.quarters - remaining_time
@@ -666,22 +674,36 @@ def _clamp_yardline(value: float) -> float:
     return max(0.0, min(100.0, value))
 
 
-def _record_special_events(offense: _TeamState, defense: _TeamState, events: Iterable[PlayEvent]) -> None:
+def _record_special_events(
+    offense: _TeamState,
+    defense: _TeamState,
+    events: Iterable[PlayEvent],
+    event_log: Dict[str, List[PlayEvent]],
+) -> None:
     if not events:
         return
     offense_events = [evt for evt in events if evt.team == "offense"]
     defense_events = [evt for evt in events if evt.team == "defense"]
     if offense_events:
         offense.book.extend(offense_events)
+        event_log.setdefault(offense.name, []).extend(offense_events)
     if defense_events:
         defense.book.extend(defense_events)
+        event_log.setdefault(defense.name, []).extend(defense_events)
 
 
-def _record_events(offense: _TeamState, defense: _TeamState, result: PlayResult) -> None:
+def _record_events(
+    offense: _TeamState,
+    defense: _TeamState,
+    result: PlayResult,
+    event_log: Dict[str, List[PlayEvent]],
+) -> None:
     offense.book.extend(result.events)
+    event_log.setdefault(offense.name, []).extend(result.events)
     defensive_events = [evt for evt in result.events if evt.team == "defense"]
     if defensive_events:
         defense.book.extend(defensive_events)
+        event_log.setdefault(defense.name, []).extend(defensive_events)
 
 
 def _select_play(
