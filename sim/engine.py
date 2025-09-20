@@ -137,8 +137,8 @@ def simulate_play(
             _advance_entity(entity, time_elapsed, DT, fatigue, override_target=target)
 
         if qb_entity:
-            pressure_distance = max(0.5, 3.0 * TUNING.pressure_mod)
-            sack_distance = 0.8
+            pressure_distance = max(0.02, TUNING.pressure_mod)
+            sack_distance = max(0.5, TUNING.sack_distance)
             for defender in defenses.values():
                 distance = _distance(defender.position, qb_entity.position)
                 if distance < pressure_distance and defender.player.player_id not in pressured_defenders:

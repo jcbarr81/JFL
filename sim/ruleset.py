@@ -12,8 +12,9 @@ from sim.fatigue import FatigueState, InjuryOutcome, check_injury
 @dataclass
 class TuningConfig:
     completion_mod: float = 0.65
-    pressure_mod: float = 0.05
-    int_mod: float = 0.3
+    pressure_mod: float = 0.045
+    sack_distance: float = 0.9
+    int_mod: float = 0.19
     yac_mod: float = 0.8
     rush_block_mod: float = 1.2
     penalty_rate_mod: float = 1.0

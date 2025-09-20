@@ -41,7 +41,7 @@ def _run(args: argparse.Namespace) -> dict:
     return {
         "parameters": {
             key: getattr(TUNING, key)
-            for key in ("completion_mod", "pressure_mod", "int_mod", "yac_mod", "rush_block_mod", "penalty_rate_mod")
+            for key in ("completion_mod", "pressure_mod", "sack_distance", "int_mod", "yac_mod", "rush_block_mod", "penalty_rate_mod")
         },
         "targets": CALIBRATION_TARGETS,
         "averages": report.league_averages,

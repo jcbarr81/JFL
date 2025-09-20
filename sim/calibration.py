@@ -143,6 +143,7 @@ def _suggest_adjustments(averages: Dict[str, float]) -> Dict[str, Dict[str, floa
     mapping = {
         "completion_pct": "completion_mod",
         "pressure_rate": "pressure_mod",
+        "sack_rate": "sack_distance",
         "int_rate": "int_mod",
         "yards_per_attempt": "yac_mod",
         "rush_ypc": "rush_block_mod",
