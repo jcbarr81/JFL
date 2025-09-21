@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import sys
@@ -9,7 +10,9 @@ from pathlib import Path
 from random import randint
 from typing import Optional
 
-from PyQt6.QtCore import QTimer
+LOGGER = logging.getLogger('gridiron.launcher')
+
+from PyQt6.QtCore import QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -40,6 +43,19 @@ ASSET_DIR_NAME = "assets"
 class LauncherConfig:
     user_home: Path
     assets_root: Path
+    log_file: Path
+
+
+def _configure_logging(log_file: Path) -> None:
+    LOGGER.handlers.clear()
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(log_file, encoding='utf-8')
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    LOGGER.addHandler(handler)
+    LOGGER.setLevel(logging.INFO)
+    LOGGER.propagate = False
+
 
 
 def _is_frozen() -> bool:
@@ -95,6 +111,9 @@ def prepare_environment() -> LauncherConfig:
     assets_root = _asset_root()
     user_home = _local_appdata() / APP_DIR_NAME
     user_home.mkdir(parents=True, exist_ok=True)
+    log_file = user_home / "launcher.log"
+    _configure_logging(log_file)
+    LOGGER.info("Preparing environment (assets_root=%s)", assets_root)
 
     db_src = assets_root / DEFAULT_DB_NAME
     db_dest = user_home / DEFAULT_DB_NAME
@@ -110,15 +129,19 @@ def prepare_environment() -> LauncherConfig:
 
     os.environ.setdefault("GRIDIRON_HOME", str(user_home))
     os.chdir(user_home)
-    return LauncherConfig(user_home=user_home, assets_root=assets_root)
+    LOGGER.info("Environment ready; working directory set to %s", user_home)
+    return LauncherConfig(user_home=user_home, assets_root=assets_root, log_file=log_file)
 
 
 class LauncherWindow(QMainWindow):
+    seasonFinished = pyqtSignal(object, object)
+
     def __init__(self, config: LauncherConfig) -> None:
         super().__init__()
         self.setWindowTitle("Gridiron Sim Launcher")
         self.resize(560, 360)
         self.config = config
+        self.seasonFinished.connect(self._on_season_finished)
         self._play_editor: Optional[PlayEditor] = None
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._season_future: Optional[Future[SeasonResult]] = None
@@ -127,6 +150,9 @@ class LauncherWindow(QMainWindow):
         self.output_log = QTextEdit()
         self.output_log.setReadOnly(True)
         self.output_log.setMinimumHeight(140)
+        self.log_file = config.log_file
+        self.append_log(f"Log file: {self.log_file}")
+        LOGGER.info("Launcher window initialized; log file at %s", self.log_file)
 
         run_button = QPushButton("Run Season Simulation")
         run_button.clicked.connect(self.handle_run_season)  # type: ignore[arg-type]
@@ -150,22 +176,32 @@ class LauncherWindow(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
+    def append_log(self, message: str) -> None:
+        self.output_log.append(message)
+
     def handle_open_editor(self) -> None:
+        LOGGER.info("Opening play editor window")
         if self._play_editor is None:
             self._play_editor = PlayEditor()
             self._play_editor.setWindowTitle("Gridiron Sim Play Editor")
         self._play_editor.show()
         self._play_editor.raise_()
         self._play_editor.activateWindow()
+        self.append_log("Play editor opened")
 
     def handle_open_data_dir(self) -> None:
+        LOGGER.info("Opening data directory at %s", self.config.user_home)
         try:
             if sys.platform.startswith("win"):
                 os.startfile(self.config.user_home)  # type: ignore[attr-defined]
+                self.append_log("Data directory opened in File Explorer")
             else:
                 QFileDialog.getOpenFileName(self, "Data Directory", str(self.config.user_home))
+                self.append_log("Data directory dialog opened")
         except OSError as exc:
+            LOGGER.exception("Unable to open data directory")
             QMessageBox.warning(self, "Open Directory", f"Unable to open folder: {exc}")
+            self.append_log(f"Failed to open data directory: {exc}")
 
     def handle_run_season(self) -> None:
         if self._season_future and not self._season_future.done():
@@ -177,41 +213,60 @@ class LauncherWindow(QMainWindow):
             return
 
         seed = randint(0, 999999)
+        LOGGER.info("Starting season simulation (seed=%s)", seed)
         self.status_label.setText(f"Simulating season (seed={seed})...")
         self.run_button.setEnabled(False)
-        self.output_log.append("Starting season simulation...\n")
+        self.append_log(f"Starting season simulation (seed={seed})")
 
         def task() -> SeasonResult:
-            return run_season(seed=seed)
+            LOGGER.info("Season simulation worker thread started")
+            try:
+                result = run_season(seed=seed, workers=1)
+                LOGGER.info("Season simulation worker thread completed")
+                return result
+            except Exception:
+                LOGGER.exception("Season simulation worker thread raised an exception")
+                raise
 
         future = self._executor.submit(task)
         self._season_future = future
         future.add_done_callback(self._handle_season_finished)
 
     def _handle_season_finished(self, future: Future[SeasonResult]) -> None:
-        def update_ui() -> None:
-            self.run_button.setEnabled(True)
-            if future.cancelled():
-                self.status_label.setText("Simulation cancelled")
-                return
-            try:
-                result = future.result()
-            except Exception as exc:  # pragma: no cover - defensive runtime guard
-                self.status_label.setText("Simulation failed")
-                QMessageBox.critical(self, "Season Simulation", f"Simulation failed: {exc}")
-                self.output_log.append(f"Simulation failed: {exc}\n")
-                return
+        LOGGER.info("Season simulation future done callback executed (done=%s, cancelled=%s)", future.done(), future.cancelled())
+        try:
+            result = future.result()
+            error: Exception | None = None
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            result = None
+            error = exc
+        self.seasonFinished.emit(result, error)
 
-            top_seed = result.standings[0] if result.standings else ("N/A", 0, 0)
-            summary = (
-                f"Season complete. Top seed: {top_seed[0]} ({top_seed[1]}-{top_seed[2]}).\n"
-                f"Exports written to {OUTPUT_DIR.resolve()}"
-            )
-            self.status_label.setText("Season simulation finished")
-            self.output_log.append(summary + "\n")
-            QMessageBox.information(self, "Season Simulation", summary)
-
-        QTimer.singleShot(0, update_ui)
+    def _on_season_finished(self, result: SeasonResult | None, error: Exception | None) -> None:
+        LOGGER.info("Season simulation UI update running")
+        self.run_button.setEnabled(True)
+        self._season_future = None
+        if error is not None:
+            LOGGER.exception("Season simulation failed", exc_info=error)
+            self.status_label.setText("Simulation failed")
+            QMessageBox.critical(self, "Season Simulation", f"Simulation failed: {error}")
+            self.append_log(f"Simulation failed: {error}")
+            return
+        if result is None:
+            LOGGER.warning("Season simulation returned no result")
+            self.status_label.setText("Simulation failed")
+            self.append_log("Simulation failed: no result returned")
+            return
+        top_seed = result.standings[0] if result.standings else ("N/A", 0, 0)
+        summary = (
+            f"Season complete. Top seed: {top_seed[0]} ({top_seed[1]}-{top_seed[2]}).\n"
+            f"Exports written to {OUTPUT_DIR.resolve()}"
+        )
+        LOGGER.info("Season simulation finished; top seed %s (%s-%s)", top_seed[0], top_seed[1], top_seed[2])
+        self.status_label.setText("Season simulation finished")
+        self.append_log(summary)
+        QMessageBox.information(self, "Season Simulation", summary)
+        LOGGER.info("Season simulation notification displayed")
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         self._executor.shutdown(wait=False, cancel_futures=True)
