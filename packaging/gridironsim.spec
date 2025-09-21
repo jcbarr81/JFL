@@ -1,28 +1,38 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
 
+def _play_datas(root: Path) -> list[tuple[str, str]]:
+    plays_root = root / "data" / "plays"
+    datas: list[tuple[str, str]] = []
+    for path in plays_root.rglob("*"):
+        if path.is_file():
+            relative = path.relative_to(plays_root)
+            target_dir = Path("assets/data/plays") / relative.parent
+            datas.append((str(path), str(target_dir)))
+    return datas
+
 spec_dir = Path(SPECPATH)
 project_root = spec_dir.parent
-plays_src = project_root / "data" / "plays"
-play_datas = []
-for path in plays_src.rglob("*"):
-    if path.is_file():
-        relative = path.relative_to(project_root)
-        target = Path("assets") / relative
-        play_datas.append((str(path), str(target)))
 
-pyqt6_datas = collect_data_files("PyQt6")
-pyqt6_hiddenimports = collect_submodules("PyQt6")
+play_datas = _play_datas(project_root)
+
+pyqt6_datas, pyqt6_binaries, pyqt6_hiddenimports = collect_all("PyQt6")
+pydantic_datas, pydantic_binaries, pydantic_hiddenimports = collect_all("pydantic")
+pydantic_core_datas, pydantic_core_binaries, pydantic_core_hiddenimports = collect_all("pydantic_core")
 
 analysis_datas = [
-    (str(project_root / "gridiron.db"), "assets/gridiron.db"),
+    (str(project_root / "gridiron.db"), "assets"),
     *play_datas,
     *pyqt6_datas,
+    *pydantic_datas,
+    *pydantic_core_datas,
 ]
+
+all_binaries = list(pyqt6_binaries) + list(pydantic_binaries) + list(pydantic_core_binaries)
 
 hidden_imports = [
     "sim.schedule",
@@ -32,13 +42,15 @@ hidden_imports = [
     "domain.db",
     "domain.models",
     *pyqt6_hiddenimports,
+    *pydantic_hiddenimports,
+    *pydantic_core_hiddenimports,
 ]
 
 
 a = Analysis(
     [str(project_root / "ui" / "windows_launcher.py")],
     pathex=[str(project_root)],
-    binaries=[],
+    binaries=all_binaries,
     datas=analysis_datas,
     hiddenimports=hidden_imports,
     hookspath=[],

@@ -1,2 +1,26 @@
-# .gitignore
+# Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
 .venv/
+
+# Test and lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Build artifacts
+build/
+dist/
+
+# Tooling
+pip-wheel-metadata/
+
+# Generated data
+*.log
+*.tmp
+data/savepoints/
+data/exports/
+
