@@ -221,7 +221,7 @@ class LauncherWindow(QMainWindow):
         def task() -> SeasonResult:
             LOGGER.info("Season simulation worker thread started")
             try:
-                result = run_season(seed=seed, workers=1)
+                result = run_season(seed=seed, workers=1, user_home=self.config.user_home)
                 LOGGER.info("Season simulation worker thread completed")
                 return result
             except Exception:
@@ -283,3 +283,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

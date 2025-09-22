@@ -1,4 +1,12 @@
 from __future__ import annotations
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from domain.gameplan import GameplanTendencies, WeeklyGameplan
 
 from random import Random
 
@@ -68,6 +76,22 @@ def _build_roster(prefix: str) -> dict[str, Player]:
         roster[player_id] = _player(player_id, position)
     return roster
 
+def _weekly_plan(code: str, opponent: str, week: int, *, run: int = 60, deep: int = 32, blitz: int = 25, zone: int = 60) -> WeeklyGameplan:
+    return WeeklyGameplan(
+        team_id=code,
+        opponent_id=opponent,
+        week=week,
+        tendencies=GameplanTendencies(
+            run_rate=run,
+            deep_shot_rate=deep,
+            blitz_rate=blitz,
+            zone_rate=zone,
+        ),
+        situations=[],
+        notes="Test plan",
+    )
+
+
 
 def test_simulate_game_produces_summary() -> None:
     home_roster = _build_roster("HOME")
@@ -124,6 +148,38 @@ def test_simulate_game_deterministic() -> None:
     assert summary_one == summary_two
 
 
+
+
+
+def test_simulate_game_tracks_gameplan_usage() -> None:
+    home_roster = _build_roster("HOME")
+    away_roster = _build_roster("AWAY")
+    home_plan = _weekly_plan("Home Club", "Away Club", 1, run=78, deep=18, blitz=12, zone=82)
+    away_plan = _weekly_plan("Away Club", "Home Club", 1, run=45, deep=48, blitz=34, zone=48)
+    summary = simulate_game(
+        "Home Club",
+        home_roster,
+        StatBook(),
+        "Away Club",
+        away_roster,
+        StatBook(),
+        seed=2024,
+        config=GameConfig(quarter_length=240.0, quarters=2, max_plays=70),
+        home_plan=home_plan,
+        away_plan=away_plan,
+    )
+
+    home_result = summary.gameplan_results.get("Home Club")
+    assert home_result is not None
+    assert home_result["plan"]["run_rate"] == 78
+    actual = home_result["actual"]
+    away_actual = summary.gameplan_results["Away Club"]["actual"]
+    assert actual["zone_rate"] >= away_actual["zone_rate"]
+    assert actual["blitz_rate"] <= away_actual["blitz_rate"]
+    comparison = home_result["comparison"]
+    assert "summary" in comparison
+    assert isinstance(comparison["summary"], str)
+    assert isinstance(comparison["summary"], str)
 
 def test_handle_special_down_field_goal_success(monkeypatch) -> None:
     home_roster = _build_roster("HOME")
@@ -256,7 +312,7 @@ def test_injury_event_triggers_substitution(monkeypatch) -> None:
     home_book = StatBook()
     away_book = StatBook()
 
-    def fake_call_offense(context, rng):
+    def fake_call_offense(context, rng, plan_bias=None):
         return PlayChoice("run")
 
     injury_calls = {"count": 0}
@@ -294,3 +350,9 @@ def test_injury_event_triggers_substitution(monkeypatch) -> None:
         if evt.type == "play_end" and (evt.metadata or {}).get("play_type") == "run"
     ]
     assert "HOME_3" in runners
+
+
+
+
+
+

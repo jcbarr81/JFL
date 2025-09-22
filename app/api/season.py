@@ -13,10 +13,13 @@ from sqlmodel import Session, select
 
 from app.api.deps import db_session
 from domain.db import BoxScoreRow, GameRow, PlayerRow, SeasonRow, TeamRow
+from domain.gameplan import GameplanRepository
 from domain.savepoint import create_savepoint
 from sim.exports import export_draft_results, export_injuries, export_player_stats, export_standings, export_team_stats
 from domain.models import Attributes, Player
 from sim.schedule import SeasonResult, make_schedule, simulate_season
+
+DEFAULT_USER_HOME = Path.home() / "GridironSim"
 
 router = APIRouter(prefix="/season", tags=["season"])
 
@@ -206,7 +209,8 @@ def _simulate_single_season(
     if not rosters:
         raise ValueError("No rosters available for simulation")
     schedule = make_schedule(list(rosters.keys()), seed=seed)
-    result = simulate_season(rosters, seed=seed, workers=workers)
+    repo = GameplanRepository(DEFAULT_USER_HOME)
+    result = simulate_season(rosters, seed=seed, workers=workers, gameplan_repo=repo)
     return _SimPayload(seed=seed, schedule=schedule, result=result)
 
 

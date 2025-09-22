@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+
+from domain.gameplan import GameplanRepository
 from domain.models import Attributes, Player
 from sim.exports import export_draft_results, export_injuries, export_player_stats, export_standings, export_team_stats
 from sim.schedule import SeasonResult, simulate_season
@@ -61,10 +63,11 @@ def _build_roster(prefix: str) -> dict[str, Player]:
     return roster
 
 
-def run_season(seed: int = 0, workers: int | None = None) -> SeasonResult:
+def run_season(seed: int = 0, workers: int | None = None, user_home: Path | None = None) -> SeasonResult:
     teams = {f"TEAM_{index}": _build_roster(f"T{index}") for index in range(1, 9)}
     worker_count = workers or max(1, (os.cpu_count() or 1))
-    result = simulate_season(teams, seed=seed, workers=worker_count)
+    repo = GameplanRepository(user_home) if user_home else None
+    result = simulate_season(teams, seed=seed, workers=worker_count, gameplan_repo=repo)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     export_standings(result, OUTPUT_DIR / "standings.csv")

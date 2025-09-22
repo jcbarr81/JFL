@@ -4,6 +4,7 @@ import base64
 import json
 import zlib
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any, Dict
 from uuid import uuid4
 
@@ -19,9 +20,12 @@ from sqlmodel import Session, select
 
 from app.api.deps import db_session
 from domain.db import BoxScoreRow, GameRow, PlayerRow, TeamRow
+from domain.gameplan import GameplanRepository
 from domain.models import Attributes, Player
 from sim.ruleset import GameConfig, GameSummary, simulate_game
 from sim.statbook import StatBook
+
+DEFAULT_USER_HOME = Path.home() / "GridironSim"
 
 router = APIRouter(prefix="/game", tags=["game"])
 
@@ -65,6 +69,7 @@ class GameSimulationResponse(BaseModel):
     drives: list[DriveSummaryPayload]
     boxscore: Dict[str, Any]
     events_blob: str | None = None
+    gameplan_results: Dict[str, Any] | None = None
 
 
 def _encode_events(summary: GameSummary) -> str | None:
@@ -206,6 +211,11 @@ async def simulate_game_endpoint(
     home_book = StatBook()
     away_book = StatBook()
 
+
+    repo = GameplanRepository(DEFAULT_USER_HOME)
+    home_plan = repo.load_plan(payload.home_team_id, opponent_id=payload.away_team_id, week=payload.week)
+    away_plan = repo.load_plan(payload.away_team_id, opponent_id=payload.home_team_id, week=payload.week)
+
     summary = await run_in_threadpool(
         simulate_game,
         payload.home_team_id,
@@ -216,6 +226,9 @@ async def simulate_game_endpoint(
         away_book,
         seed=payload.seed,
         config=config,
+        week=payload.week,
+        home_plan=home_plan,
+        away_plan=away_plan,
     )
 
     game_id: str | None = None
@@ -239,4 +252,5 @@ async def simulate_game_endpoint(
             "away": summary.away_boxscore,
         },
         events_blob=events_blob,
+        gameplan_results=summary.gameplan_results if summary.gameplan_results else None,
     )

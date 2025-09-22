@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from random import Random
-from typing import Literal, Optional
+from typing import Dict, Literal, Optional
 
 PlayCategory = Literal["run", "pass", "sideline_pass"]
 
@@ -22,7 +22,7 @@ class PlayChoice:
     category: PlayCategory
 
 
-def call_offense(context: OffenseContext, rng: Optional[Random] = None) -> PlayChoice:
+def call_offense(context: OffenseContext, rng: Optional[Random] = None, plan_bias: Dict[str, float] | None = None) -> PlayChoice:
     random = rng or Random()
 
     weights: dict[PlayCategory, float] = {
@@ -74,6 +74,18 @@ def call_offense(context: OffenseContext, rng: Optional[Random] = None) -> PlayC
         weights["pass"] += 1.5
         weights["sideline_pass"] += 0.5
 
+    if plan_bias:
+        run_target = max(0.0, min(100.0, float(plan_bias.get("run_rate", 50.0))))
+        pass_target = max(0.0, min(100.0, 100.0 - run_target))
+        run_scale = 0.5 + run_target / 100.0
+        pass_scale = 0.5 + pass_target / 100.0
+        weights["run"] *= run_scale
+        weights["pass"] *= pass_scale
+        deep_target = max(0.0, min(100.0, float(plan_bias.get("deep_shot_rate", 35.0))))
+        deep_ratio = deep_target / 100.0
+        weights["sideline_pass"] += max(0.0, weights["pass"]) * (0.15 + deep_ratio)
+        if deep_target < 20.0:
+            weights["sideline_pass"] *= 0.55
     weights = {key: max(0.0, value) for key, value in weights.items()}
     total = sum(weights.values())
     if total == 0:

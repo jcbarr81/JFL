@@ -4,8 +4,6 @@ import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Set
 
-from sim.ruleset import TUNING
-
 from domain.models import Assignment, Attributes, Play, Player, RoutePoint
 from sim.statbook import PlayEvent
 
@@ -73,9 +71,13 @@ def simulate_play(
     duration: float = 8.0,
     tick_rate: float = TICK_RATE,
     fatigue_modifiers: Optional[Dict[str, float]] = None,
+    pressure_bonus: float = 1.0,
 ) -> PlayResult:
     rng = _SeededRandom(seed)
     modifiers = fatigue_modifiers or {}
+    from sim.ruleset import TUNING
+    globals()["TUNING"] = TUNING
+    pressure_factor = max(0.25, min(2.5, pressure_bonus))
 
     offenses = _initialise_offense_entities(play, offense_roster, modifiers)
     defenses = _initialise_defense_entities(defense_roster, modifiers)
@@ -137,8 +139,8 @@ def simulate_play(
             _advance_entity(entity, time_elapsed, DT, fatigue, override_target=target)
 
         if qb_entity:
-            pressure_distance = max(0.02, TUNING.pressure_mod)
-            sack_distance = max(0.5, TUNING.sack_distance)
+            pressure_distance = max(0.02, TUNING.pressure_mod / pressure_factor)
+            sack_distance = max(0.5, TUNING.sack_distance / pressure_factor)
             for defender in defenses.values():
                 distance = _distance(defender.position, qb_entity.position)
                 if distance < pressure_distance and defender.player.player_id not in pressured_defenders:
@@ -811,4 +813,3 @@ def _finalize_play(
         completed=completed,
         events=list(events),
     )
-

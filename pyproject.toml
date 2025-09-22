@@ -45,3 +45,4 @@ allow_untyped_globals = true
 [[tool.mypy.overrides]]
 module = ["*.migrations.*"]
 ignore_errors = true
+

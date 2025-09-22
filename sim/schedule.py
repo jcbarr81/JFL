@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from random import Random
 from typing import Dict, Iterable, List, Sequence, Tuple
 
+from domain.gameplan import GameplanRepository, WeeklyGameplan
 from domain.models import Player
 from sim.ruleset import GameConfig, GameSummary, simulate_game
 from sim.seed import SeedManager
@@ -53,6 +54,9 @@ def _simulate_game_task(
     away_roster: Dict[str, Player],
     seed: int,
     config: GameConfig,
+    week: int,
+    home_plan: WeeklyGameplan | None = None,
+    away_plan: WeeklyGameplan | None = None,
 ) -> GameSummary:
     home_book = StatBook()
     away_book = StatBook()
@@ -65,7 +69,11 @@ def _simulate_game_task(
         away_book,
         seed=seed,
         config=config,
+        week=week,
+        home_plan=home_plan,
+        away_plan=away_plan,
     )
+
 
 
 
@@ -75,6 +83,7 @@ def _finalize_game(
     away: TeamSeason,
     rng: Random,
     game_results: List[GameSummary],
+    gameplan_repo: GameplanRepository | None = None,
 ) -> None:
     if summary.home_events:
         home.book.extend(summary.home_events)
@@ -95,8 +104,27 @@ def _finalize_game(
         else:
             away.wins += 1
             home.losses += 1
+    if gameplan_repo and summary.gameplan_results:
+        for entry in summary.gameplan_results.values():
+            if not isinstance(entry, dict):
+                continue
+            team_id = entry.get("team_id")
+            opponent_id = entry.get("opponent_id")
+            actual = entry.get("actual")
+            week = entry.get("week")
+            if not (
+                isinstance(team_id, str)
+                and isinstance(opponent_id, str)
+                and isinstance(actual, dict)
+                and isinstance(week, int)
+            ):
+                continue
+            try:
+                actual_floats = {key: float(value) for key, value in actual.items()}
+            except (TypeError, ValueError):
+                continue
+            gameplan_repo.record_execution(team_id, opponent_id, week, actual_floats)
     game_results.append(summary)
-
 
 
 def simulate_season(
@@ -105,6 +133,7 @@ def simulate_season(
     seed: int = 0,
     config: GameConfig | None = None,
     workers: int = 1,
+    gameplan_repo: GameplanRepository | None = None,
 ) -> SeasonResult:
     rng = Random(seed)
     schedule_matrix = make_schedule(list(teams.keys()), seed=seed)
@@ -135,6 +164,16 @@ def simulate_season(
                     home = season_teams[home_id]
                     away = season_teams[away_id]
                     game_seed = seed_manager.game_seed(season_label, week, home_id, away_id)
+                    home_plan = (
+                        gameplan_repo.load_plan(home_id, opponent_id=away_id, week=week)
+                        if gameplan_repo
+                        else None
+                    )
+                    away_plan = (
+                        gameplan_repo.load_plan(away_id, opponent_id=home_id, week=week)
+                        if gameplan_repo
+                        else None
+                    )
                     future = executor.submit(
                         _simulate_game_task,
                         home_id,
@@ -143,16 +182,36 @@ def simulate_season(
                         away.roster,
                         game_seed,
                         season_config,
+                        week,
+                        home_plan,
+                        away_plan,
                     )
                     futures.append((home_id, away_id, future))
                 for home_id, away_id, future in futures:
                     summary = future.result()
-                    _finalize_game(summary, season_teams[home_id], season_teams[away_id], rng, game_results)
+                    _finalize_game(
+                        summary,
+                        season_teams[home_id],
+                        season_teams[away_id],
+                        rng,
+                        game_results,
+                        gameplan_repo=gameplan_repo,
+                    )
             else:
                 for home_id, away_id in games:
                     home = season_teams[home_id]
                     away = season_teams[away_id]
                     game_seed = seed_manager.game_seed(season_label, week, home_id, away_id)
+                    home_plan = (
+                        gameplan_repo.load_plan(home_id, opponent_id=away_id, week=week)
+                        if gameplan_repo
+                        else None
+                    )
+                    away_plan = (
+                        gameplan_repo.load_plan(away_id, opponent_id=home_id, week=week)
+                        if gameplan_repo
+                        else None
+                    )
                     summary = _simulate_game_task(
                         home_id,
                         home.roster,
@@ -160,8 +219,11 @@ def simulate_season(
                         away.roster,
                         game_seed,
                         season_config,
+                        week,
+                        home_plan,
+                        away_plan,
                     )
-                    _finalize_game(summary, home, away, rng, game_results)
+                    _finalize_game(summary, home, away, rng, game_results, gameplan_repo=gameplan_repo)
     finally:
         if executor:
             executor.shutdown()

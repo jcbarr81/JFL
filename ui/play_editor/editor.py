@@ -37,7 +37,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from app.api.plays import _validate_play
+from domain.playbook import validate_play
 from domain.models import Play
 from pydantic import ValidationError
 
@@ -558,7 +558,7 @@ class PlayEditor(QMainWindow):
                     "\n".join(error["msg"] for error in exc.errors()),
                 )
             return False
-        errors = _validate_play(play)
+        errors = validate_play(play)
         if errors:
             if show_dialog:
                 message = "\n".join(error.get("msg", "Unknown error") for error in errors)
@@ -608,14 +608,18 @@ class PlayEditor(QMainWindow):
         )
         if not filename:
             return
-        path = Path(filename)
+        self.load_from_path(Path(filename))
+
+    def load_from_path(self, path: Path) -> None:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             play = Play.model_validate(data)
         except (OSError, json.JSONDecodeError, ValidationError) as exc:
             QMessageBox.critical(self, "Open Play", f"Failed to load play: {exc}")
             return
+        self._apply_loaded_play(play, path)
 
+    def _apply_loaded_play(self, play: Play, path: Optional[Path]) -> None:
         self._clear_players()
         self.metadata_widget.set_metadata(
             {

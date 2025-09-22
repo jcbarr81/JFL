@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections import defaultdict
 from random import Random
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sim.special_teams import PenaltyType, apply_penalty, attempt_field_goal
 from sim.fatigue import FatigueState, InjuryOutcome, check_injury
@@ -24,6 +24,7 @@ TUNING = TuningConfig()
 
 
 from domain.models import Assignment, Play, Player, RoutePoint
+from domain.gameplan import GameplanComparison, GameplanTendencies, WeeklyGameplan
 from sim.ai_decision import OffenseContext, PlayChoice, call_offense
 from sim.engine import PlayResult, simulate_play
 from sim.statbook import PlayEvent, StatBook
@@ -52,6 +53,7 @@ class DriveSummary:
     result: str
 
 
+
 @dataclass
 class GameSummary:
     home_team: str
@@ -66,6 +68,19 @@ class GameSummary:
     away_boxscore: Dict[str, Dict[str, Dict[str, float]]]
     home_events: List[PlayEvent] = field(default_factory=list)
     away_events: List[PlayEvent] = field(default_factory=list)
+    week: int = 1
+    gameplan_results: Dict[str, Dict[str, object]] = field(default_factory=dict)
+
+
+@dataclass
+class GameplanRuntimeStats:
+    offensive_calls: int = 0
+    run_calls: int = 0
+    pass_calls: int = 0
+    deep_shots: int = 0
+    defensive_calls: int = 0
+    blitz_calls: int = 0
+    zone_calls: int = 0
 
 
 @dataclass
@@ -76,6 +91,8 @@ class _TeamState:
     score: int = 0
     fatigue: Dict[str, FatigueState] = field(default_factory=dict)
     injuries: Dict[str, "InjuryStatus"] = field(default_factory=dict)
+    gameplan: WeeklyGameplan | None = None
+    plan_stats: GameplanRuntimeStats = field(default_factory=GameplanRuntimeStats)
 
     def fatigue_state(self, player_id: str) -> FatigueState:
         return self.fatigue.setdefault(player_id, FatigueState())
@@ -232,13 +249,16 @@ def simulate_game(
     *,
     seed: int,
     config: Optional[GameConfig] = None,
+    week: int = 1,
+    home_plan: WeeklyGameplan | None = None,
+    away_plan: WeeklyGameplan | None = None,
 ) -> GameSummary:
     cfg = config or GameConfig()
     rng = Random(seed)
 
     teams = [
-        _TeamState(name=home_team, roster=home_roster, book=home_book),
-        _TeamState(name=away_team, roster=away_roster, book=away_book),
+        _TeamState(name=home_team, roster=home_roster, book=home_book, gameplan=home_plan),
+        _TeamState(name=away_team, roster=away_roster, book=away_book, gameplan=away_plan),
     ]
 
     event_log: Dict[str, List[PlayEvent]] = {home_team: [], away_team: []}
@@ -319,6 +339,7 @@ def simulate_game(
             pre_yardline = yardline
             pre_down = down
             pre_yards_to_first = yards_to_first
+            plan_bias = _plan_bias_from_gameplan(offense.gameplan)
             play = _select_play(
                 offense,
                 defense,
@@ -329,9 +350,18 @@ def simulate_game(
                 current_quarter,
                 drive_index,
                 rng,
+                plan_bias,
             )
 
-            defense_personnel = _select_defensive_unit(defense, drive_index)
+            defense_personnel, pressure_bonus = _select_defense_strategy(
+                defense,
+                down,
+                yards_to_first,
+                yardline,
+                remaining_time,
+                drive_index,
+                rng,
+            )
             fatigue_modifiers = _fatigue_modifiers_for_play(play, offense, defense, defense_personnel)
 
             play_seed = rng.randint(0, 2**31 - 1)
@@ -341,6 +371,7 @@ def simulate_game(
                 defense_personnel,
                 seed=play_seed,
                 fatigue_modifiers=fatigue_modifiers,
+                pressure_bonus=pressure_bonus,
             )
 
             total_plays += 1
@@ -453,6 +484,35 @@ def simulate_game(
     else:
         winner = None
 
+    gameplan_results: Dict[str, Dict[str, object]] = {}
+    for state, opponent, plan in (
+        (home_state, away_state, home_plan),
+        (away_state, home_state, away_plan),
+    ):
+        if plan is None:
+            continue
+        actual = _gameplan_actuals(state.plan_stats)
+        comparison = GameplanComparison(
+            run_delta=actual["run_rate"] - plan.tendencies.run_rate,
+            deep_delta=actual["deep_shot_rate"] - plan.tendencies.deep_shot_rate,
+            blitz_delta=actual["blitz_rate"] - plan.tendencies.blitz_rate,
+            zone_delta=actual["zone_rate"] - plan.tendencies.zone_rate,
+        )
+        gameplan_results[state.name] = {
+            "team_id": state.name,
+            "opponent_id": opponent.name,
+            "week": plan.week,
+            "plan": plan.tendencies.to_dict(),
+            "actual": actual,
+            "comparison": {
+                "run_delta": round(comparison.run_delta, 2),
+                "deep_delta": round(comparison.deep_delta, 2),
+                "blitz_delta": round(comparison.blitz_delta, 2),
+                "zone_delta": round(comparison.zone_delta, 2),
+                "summary": comparison.summary(),
+            },
+        }
+
     return GameSummary(
         home_team=home_state.name,
         away_team=away_state.name,
@@ -466,6 +526,8 @@ def simulate_game(
         away_boxscore=away_state.book.boxscore(),
         home_events=home_events,
         away_events=away_events,
+        week=week,
+        gameplan_results=gameplan_results,
     )
 def _current_quarter(config: GameConfig, remaining_time: float) -> int:
     elapsed = config.quarter_length * config.quarters - remaining_time
@@ -706,6 +768,19 @@ def _record_events(
         event_log.setdefault(defense.name, []).extend(defensive_events)
 
 
+def _plan_bias_from_gameplan(plan: WeeklyGameplan | None) -> Dict[str, float] | None:
+    if plan is None:
+        return None
+    tendencies = plan.tendencies
+    return {
+        "run_rate": float(tendencies.run_rate),
+        "deep_shot_rate": float(tendencies.deep_shot_rate),
+    }
+
+
+
+
+
 def _select_play(
     offense: _TeamState,
     defense: _TeamState,
@@ -716,6 +791,7 @@ def _select_play(
     quarter: int,
     drive_index: int,
     rng: Random,
+    plan_bias: Dict[str, float] | None,
 ) -> Play:
     context = OffenseContext(
         down=down,
@@ -725,10 +801,15 @@ def _select_play(
         score_diff=offense.score - defense.score,
         quarter=quarter,
     )
-    choice: PlayChoice = call_offense(context, rng)
+    choice: PlayChoice = call_offense(context, rng, plan_bias)
+    stats = offense.plan_stats
+    stats.offensive_calls += 1
     if choice.category == "run":
+        stats.run_calls += 1
         return _build_run_play(offense, drive_index)
+    stats.pass_calls += 1
     if choice.category == "sideline_pass":
+        stats.deep_shots += 1
         return _build_sideline_pass(offense, drive_index)
     return _build_pass_play(offense, drive_index)
 
@@ -879,20 +960,104 @@ def _choose_multiple(
     return selected
 
 
-def _select_defensive_unit(team: _TeamState, drive_index: int) -> Dict[str, Player]:
-    template = [
-        ["DL"],
-        ["DL"],
-        ["DL"],
-        ["DL"],
-        ["LB"],
-        ["LB"],
-        ["LB"],
-        ["CB"],
-        ["CB"],
-        ["S"],
-        ["S"],
-    ]
+
+def _select_defense_strategy(
+    defense: _TeamState,
+    down: int,
+    yards_to_first: float,
+    yardline: float,
+    remaining_time: float,
+    drive_index: int,
+    rng: Random,
+) -> tuple[Dict[str, Player], float]:
+    plan = defense.gameplan
+    stats = defense.plan_stats
+    stats.defensive_calls += 1
+
+    zone_probability = 0.52
+    if plan is not None:
+        zone_probability = max(0.05, min(0.95, plan.tendencies.zone_rate / 100.0))
+    if down >= 3 and yards_to_first >= 7:
+        zone_probability = min(0.98, zone_probability + 0.08)
+    zone_call = rng.random() < zone_probability
+    if zone_call:
+        stats.zone_calls += 1
+
+    blitz_probability = 0.22
+    if plan is not None:
+        blitz_probability = max(0.0, min(0.9, plan.tendencies.blitz_rate / 100.0))
+    if down == 1 and yards_to_first <= 3:
+        blitz_probability *= 0.8
+    if down >= 3 and yards_to_first >= 8:
+        blitz_probability *= 0.75
+    blitz_call = rng.random() < blitz_probability
+    if blitz_call:
+        stats.blitz_calls += 1
+
+    package = "base"
+    if zone_call and plan is not None and plan.tendencies.zone_rate >= 65:
+        package = "nickel"
+        if plan.tendencies.zone_rate >= 80 and rng.random() < 0.5:
+            package = "dime"
+    elif not zone_call and plan is not None and plan.tendencies.zone_rate <= 40 and rng.random() < 0.3:
+        package = "dime"
+
+    unit = _select_defensive_unit(defense, drive_index, package=package)
+
+    pressure_bonus = 1.0
+    if blitz_call:
+        base_bonus = plan.tendencies.blitz_rate / 100.0 if plan is not None else 0.3
+        pressure_bonus = min(2.5, 1.0 + 0.6 + base_bonus)
+    elif plan is not None and plan.tendencies.blitz_rate <= 15:
+        pressure_bonus = max(0.6, 1.0 - (0.2 - plan.tendencies.blitz_rate / 100.0))
+
+    return unit, pressure_bonus
+
+
+
+def _select_defensive_unit(team: _TeamState, drive_index: int, package: str = "base") -> Dict[str, Player]:
+    if package == "nickel":
+        template = [
+            ["DL"],
+            ["DL"],
+            ["DL"],
+            ["DL"],
+            ["LB"],
+            ["LB"],
+            ["CB"],
+            ["CB"],
+            ["CB"],
+            ["S"],
+            ["S"],
+        ]
+    elif package == "dime":
+        template = [
+            ["DL"],
+            ["DL"],
+            ["DL"],
+            ["DL"],
+            ["LB"],
+            ["CB"],
+            ["CB"],
+            ["CB"],
+            ["CB"],
+            ["S"],
+            ["S"],
+        ]
+    else:
+        template = [
+            ["DL"],
+            ["DL"],
+            ["DL"],
+            ["DL"],
+            ["LB"],
+            ["LB"],
+            ["LB"],
+            ["CB"],
+            ["CB"],
+            ["S"],
+            ["S"],
+        ]
     unit: Dict[str, Player] = {}
     exclude: set[str] = set()
     for positions in template:
@@ -927,6 +1092,24 @@ def _select_defensive_unit(team: _TeamState, drive_index: int) -> Dict[str, Play
         if len(selected) == 11:
             break
     return selected
+
+
+def _gameplan_actuals(stats: GameplanRuntimeStats) -> Dict[str, float]:
+    offensive_calls = max(1, stats.offensive_calls)
+    run_rate = (stats.run_calls / offensive_calls) * 100.0
+    pass_calls = stats.pass_calls
+    deep_rate = (stats.deep_shots / pass_calls) * 100.0 if pass_calls else 0.0
+    defensive_calls = max(1, stats.defensive_calls)
+    blitz_rate = (stats.blitz_calls / defensive_calls) * 100.0
+    zone_rate = (stats.zone_calls / defensive_calls) * 100.0
+    return {
+        "run_rate": round(run_rate, 2),
+        "deep_shot_rate": round(deep_rate, 2),
+        "blitz_rate": round(blitz_rate, 2),
+        "zone_rate": round(zone_rate, 2),
+    }
+
+
 
 
 def _fatigue_modifiers_for_play(

@@ -478,12 +478,12 @@ Here’s a **Phase Two UI/UX & Franchise Experience** project plan, written in M
 
 ## Cross-Cutting “Definition of Done” (every step)
 
-* ✅ The feature’s UI is reachable from the sidebar or a contextual link.
-* ✅ Changes persist to DB; backing API methods are typed and covered by tests.
-* ✅ Telemetry/events update other open pages appropriately.
-* ✅ Theming, keyboard shortcuts, and accessibility applied.
-* ✅ Performance budget respected; no noticeable UI hitches.
-* ✅ Docs updated: short “How to use” paragraph in `docs/` and a screenshot.
+* �... The feature’s UI is reachable from the sidebar or a contextual link.
+* �... Changes persist to DB; backing API methods are typed and covered by tests.
+* �... Telemetry/events update other open pages appropriately.
+* �... Theming, keyboard shortcuts, and accessibility applied.
+* �... Performance budget respected; no noticeable UI hitches.
+* �... Docs updated: short “How to use” paragraph in `docs/` and a screenshot.
 
 ---
 
@@ -495,3 +495,4 @@ Here’s a **Phase Two UI/UX & Franchise Experience** project plan, written in M
 4. **Season & Presentation**: Season Hub → Live Sim/Replay → Analytics
 5. **Worldbuilding**: Injuries/Training → News Hub → Settings/Accessibility
 6. **Power User**: Save/Export → Plugins → Polish/Perf
+

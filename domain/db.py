@@ -62,6 +62,46 @@ class TeamRow(SQLModel, table=True):
         max_length=4,
     )
 
+class AppSettingRow(SQLModel, table=True):
+    """Simple key/value store for UI and application preferences."""
+
+    key: str = Field(primary_key=True)
+    value: str = Field(sa_column=Column(String, nullable=False))
+
+class DepthUnitEnum(str, Enum):
+    """Units for depth-chart organization."""
+
+    OFFENSE = "offense"
+    DEFENSE = "defense"
+    SPECIAL = "special_teams"
+
+
+class DepthChartRow(SQLModel, table=True):
+    """Depth chart assignment for a given team position slot."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    team_id: str = Field(foreign_key="teamrow.team_id")
+    unit: DepthUnitEnum = Field(sa_column=Column(String(length=32), nullable=False))
+    role: str = Field(sa_column=Column(String(length=32), nullable=False))
+    position: PositionEnum = Field(sa_column=Column(POSITION_COLUMN))
+    slot_index: int = Field(ge=0, le=4)
+    player_id: str | None = Field(default=None, foreign_key="playerrow.player_id")
+
+
+class ContractRow(SQLModel, table=True):
+    """Persisted contract information for players."""
+
+    contract_id: str = Field(primary_key=True)
+    player_id: str = Field(foreign_key="playerrow.player_id")
+    team_id: str = Field(foreign_key="teamrow.team_id")
+    player_name: str = Field(sa_column=Column(String(length=64), nullable=False))
+    position: PositionEnum = Field(sa_column=Column(POSITION_COLUMN))
+    years: int = Field(default=1, ge=1, le=7)
+    base_salary: float = Field(default=1_000_000, ge=0)
+    signing_bonus: float = Field(default=0.0, ge=0)
+    signing_year: int = Field(default=2025)
+    status: str = Field(sa_column=Column(String(length=32), nullable=False), default="Active")
+
 
 class SeasonRow(SQLModel, table=True):
     """Season metadata for league play."""
@@ -144,3 +184,6 @@ def get_session() -> Iterator[Session]:
         raise
     finally:
         session.close()
+
+
+

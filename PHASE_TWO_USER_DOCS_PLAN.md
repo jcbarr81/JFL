@@ -403,11 +403,11 @@ For **every Phase Two feature**, add a paired docs task. Below are the *extra* d
 
 ## E. Documentation Quality Gates (apply to every feature PR)
 
-* âœ… Each new UI view must add/modify at least one docs page.
-* âœ… Screenshots/GIFs updated; filenames reflect the current theme.
-* âœ… A `HelpLink` to the new/updated page exists in the UI.
-* âœ… Docs lints pass (broken links/anchors checked via `mkdocs build -s`).
-* âœ… â€œWhat changedâ€ entry added to `changelog.md`.
+* âœ... Each new UI view must add/modify at least one docs page.
+* âœ... Screenshots/GIFs updated; filenames reflect the current theme.
+* âœ... A `HelpLink` to the new/updated page exists in the UI.
+* âœ... Docs lints pass (broken links/anchors checked via `mkdocs build -s`).
+* âœ... â€œWhat changedâ€ entry added to `changelog.md`.
 
 ---
 
@@ -442,3 +442,4 @@ For **every Phase Two feature**, add a paired docs task. Below are the *extra* d
 4. **Season & Presentation Docs** (Calendar, Results, Live, Replay, Analytics)
 5. **Worldbuilding Docs** (Injuries/Training, News, Settings/Accessibility)
 6. **Power User Docs** (Export/Share, Plugins, Troubleshooting, Glossary)
+

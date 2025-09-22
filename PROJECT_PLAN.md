@@ -69,11 +69,11 @@
 ## Cross‑Cutting Definition of Done
 
 For **every** step below, it is Done when:
-- ✅ Code formatted (black), lint‑clean (ruff), typed (mypy)  
-- ✅ Unit tests added/updated; `pytest` passes  
-- ✅ Public functions have docstrings and/or docs updated  
-- ✅ Determinism preserved where claimed  
-- ✅ No behavior‑affecting TODOs remain
+- �... Code formatted (black), lint‑clean (ruff), typed (mypy)  
+- �... Unit tests added/updated; `pytest` passes  
+- �... Public functions have docstrings and/or docs updated  
+- �... Determinism preserved where claimed  
+- �... No behavior‑affecting TODOs remain
 
 ---
 
@@ -547,3 +547,4 @@ gridiron-sim/
 **Notes**
 - Store long‑lived entities (players, teams, seasons, games, box scores) in SQL; store **plays** as JSON on disk and register in DB for versioning.
 - Use deterministic seeds per `(season, week, home_id, away_id)` to ensure reproducibility.
+
